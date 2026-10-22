@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import * as cheerio from 'cheerio';
+import { getEnvironment, setEnvironment } from '../../../dist/core/environment/index.js';
 import { FetchState } from '../../../dist/core/fetch/fetch-state.js';
 import {
 	createComponent,
@@ -179,6 +180,39 @@ describe('CSP Rendering', () => {
 			assert.ok(content.includes('sha256-xyz789'), 'Should include first script hash');
 			assert.ok(content.includes('sha256-uvw456'), 'Should include second script hash');
 			assert.ok(content.includes('script-src'), 'Should have script-src directive');
+		});
+	});
+
+	describe('Head Element Hashes', () => {
+		it('hashes inline head elements but not external stylesheets and scripts', async () => {
+			const pipeline = createCspPipeline();
+			setEnvironment(pipeline.manifest, {
+				...getEnvironment(pipeline.manifest),
+				headElements: () => ({
+					links: new Set(),
+					styles: new Set([
+						{ props: { rel: 'stylesheet', href: '/main.css' }, children: '' },
+						{ props: {}, children: 'body{color:red}' },
+					]),
+					scripts: new Set([
+						{ props: { type: 'module', src: '/main.js' }, children: '' },
+						{ props: { type: 'module' }, children: 'console.log(1)' },
+					]),
+				}),
+			});
+
+			const { html } = await renderPage(SimplePage, pipeline);
+			const $ = cheerio.load(html);
+			const csp = parseCsp($('meta[http-equiv="Content-Security-Policy"]').attr('content')!);
+
+			assert.deepEqual(csp.get('style-src'), [
+				"'self'",
+				"'sha256-FcQqt3aNlV7AZnGV4zkQRVeCeJOxbMPnQSx258L803E='",
+			]);
+			assert.deepEqual(csp.get('script-src'), [
+				"'self'",
+				"'sha256-CihokcEcBW4atb/CW/XWsvWwbTjqwQlE9nj9ii5ww5M='",
+			]);
 		});
 	});
 

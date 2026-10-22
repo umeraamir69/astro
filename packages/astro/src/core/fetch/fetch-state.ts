@@ -445,10 +445,15 @@ export class FetchState implements AstroFetchState {
 			this.shouldInjectCspMetaTags ?? manifest.shouldInjectCspMetaTags;
 		const cspAlgorithm = manifest.csp?.algorithm ?? 'SHA-256';
 		if (shouldInjectCspMetaTags) {
+			// Only inline elements are hashed. External `<link href>` / `<script src>` entries have
+			// empty `children`, and hashing them would add the empty-string hash, which also makes
+			// browsers ignore `'unsafe-inline'` (CSP Level 3).
 			for (const style of styles) {
+				if (style.props.href) continue;
 				extraStyleHashes.push(await generateCspDigest(style.children, cspAlgorithm));
 			}
 			for (const script of scripts) {
+				if (script.props.src) continue;
 				extraScriptHashes.push(await generateCspDigest(script.children, cspAlgorithm));
 			}
 		}
